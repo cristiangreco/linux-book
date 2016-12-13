@@ -35,6 +35,34 @@ Note that the name of the file is not in the inode (in fact, the file name is ju
 File attributes
 ===============
 
+The family of stat() syscalls retrieve information about a file, mostly drawn from the inode. They require execute permissions on all the directories on the path that lead to the filename, but not on the file itself.
+
+The syscalls return a stat structure where the st_mode field is a bitmask containing file type (first 4 bits) and file permissions (bottom 12 bits).
+
+The 9 permissions bits for user, group and other work as expected for regular files. Permissions for directories are interpreted a bit differently:
+
+- read: the content can be listed
+- write: files can be created and deleted from the directory (no need for perms on the file itself to delete it)
+- execute: search perms, i.e. the files can be accessed (read inode content)
+
+The easiest way to realize this is to think that a directory contains just a mapping of names to inodes numbers: permissions on directory allow to read, modify and follow those mappings.
+
+Permissions checking when accessing a path is:
+
+- if the process is privileged, access is always granted
+- else if effective user-ID matches the file owner, access is granted based on file user permissions
+- else if effective group-ID or any supplemental group-ID matches the file group, access is granted based on file group permissions; else access granted based on file other permissions.
+
+Also, if the path contains a directory prefix, execution permissions on each directory is checked.
+
+The first 3 permission bits are the set-user-ID, set-group-ID and sticky bit. The sticky bit acts for directories as a restricted-deletion-flag: an unprivileged process can unlink and rename files in a directory with sticky bit set only if it has write permission on the directory and owns the file or the directory (normally write permission on the directory would be sufficient). This makes it possible to create a directory that is shared by many users, who can each create and delete their own files in the directory but can’t delete files owned by other users (used for /tmp). The sticky bit states that files and directories within that directory may only be deleted or renamed by their owner (or root).
+
+At file creation, the permissions specified in the mode parameter are modified by the umask, a process attribute that specifies which permission bits should always be turned off. This value is inherited and usually for the shell is initialized to 0022 to disable write permissions to group and other.
+
+Timestamps are in the fields st_atime (last access), st_mtime (last modification) and st_ctime (last change of inode information). Various syscalls implicitly change one or more of those values, and they can also be changed by specific syscalls.
+
+About file ownership, at creation time the user-ID is the effective user-ID of the process, while the group-ID has a different behavior depending also on the type of filesystem. They can be changed with the family of chown syscalls, but only a privileged process can change the user-ID of a file (and set the group-ID to any value), while an unprivileged process can change the group-ID of a file that owns (i.e. that matches its effective user-ID) to any of the group of which it is member. If owner or group are changed, the set-user-ID and set-group-ID bits are turned off.
+
 Directories, hard links and soft links
 ======================================
 
